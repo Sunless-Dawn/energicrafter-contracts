@@ -1,0 +1,22 @@
+{
+  "name": "crafting-game",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "compile-ts": "tsc",
+    "compile-sol": "hardhat compile",
+    "compile": "npm run compile-ts && npm run compile-sol",
+    "test": "hardhat test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.15"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.1.0"
+  }
+}
