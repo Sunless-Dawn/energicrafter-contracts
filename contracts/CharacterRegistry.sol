@@ -10,9 +10,9 @@ contract EnergiCrafterRegistry is Ownable {
     EnergiCrafterCharacters public characters;
     EnergiCrafterSkills public skills;
     
-    constructor() Ownable(msg.sender) {
+    constructor(address _signer) Ownable(msg.sender) {
         characters = new EnergiCrafterCharacters(address(this));
-        skills = new EnergiCrafterSkills(address(this));
+        skills = new EnergiCrafterSkills(_signer, address(this));
     }
     
     // Called by Characters contract when transferring
@@ -31,7 +31,12 @@ contract EnergiCrafterRegistry is Ownable {
             characters.ownerOf(characterId) == msg.sender,
             "Not character owner"
         );
-        skills.learnSkill(characterId, msg.sender, skillType);
+        skills.learnSkill(EnergiCrafterSkills.LearnSkillParams({
+            characterId: characterId,
+            skillType: skillType,
+            nonce: 0,
+            signature: ""
+        }));
     }
     
     function hasSkill(uint256 characterId, uint256 skillType) external view returns (bool) {
