@@ -13,7 +13,7 @@ contract EnergiCrafterSkills is ERC1155 {
     // Track the next instance ID for each skill type
     mapping(uint256 => uint256) private nextSkillInstance;
     
-    constructor(address _registry) ERC1155("ipfs://{id}.json") {
+    constructor(address _registry) ERC1155("https://assets.energicrafter.com/metadata/skills/{id}.json") {
         registry = EnergiCrafterRegistry(_registry);
     }
     

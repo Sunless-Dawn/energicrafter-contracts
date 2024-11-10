@@ -36,7 +36,7 @@ contract EnergiCrafterItems is ERC1155, Ownable {
     
     constructor(
         address _signer
-    ) ERC1155("ipfs://{id}.json") Ownable(msg.sender) {
+    ) ERC1155("https://assets.energicrafter.com/metadata/items/{id}.json") Ownable(msg.sender) {
         signerAddress = _signer;
     }
     
