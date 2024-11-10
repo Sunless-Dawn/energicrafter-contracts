@@ -2,41 +2,104 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
-import "./CharacterRegistry.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
-contract EnergiCrafterSkills is ERC1155 {
-    EnergiCrafterRegistry immutable public registry;
+contract EnergiCrafterSkills is ERC1155, Ownable {
+    using ECDSA for bytes32;
 
-    // Track which character owns each skill instance
+    address public signerAddress;
+    address public immutable registry;
+
     mapping(uint256 => uint256) public skillCharacter; // skillInstance -> characterId
-
-    // Track the next instance ID for each skill type
-    mapping(uint256 => uint256) private nextSkillInstance;
+    mapping(uint256 => uint256[]) private characterSkills; // characterId -> skillInstanceIds[]
+    mapping(uint256 => uint256) public nextSkillInstance; // skillType -> nextInstanceId
+    mapping(uint256 => bool) public globalSkills; // skillType -> exists in academy
+    mapping(address => uint256) public nonces;
 
     // Two special skills that are at the root
     uint256 public constant ITEM_CRAFT = 1;
     uint256 public constant SKILL_CRAFT = 2;
 
-    // Add new mapping to track skills per character
-    mapping(uint256 => uint256[]) private characterSkills; // characterId -> skillInstanceIds[]
 
-    constructor(address _registry) ERC1155("https://assets.energicrafter.com/metadata/skills/{id}.json") {
-        registry = EnergiCrafterRegistry(_registry);
+    event SkillLearned(uint256 indexed characterId, uint256 skillType, uint256 instanceId);
+    event NewSkillCrafted(uint256 indexed characterId, uint256 skillType);
+
+    struct LearnSkillParams {
+        uint256 characterId;
+        uint256 skillType;
+        uint256 nonce;
+        bytes signature;
     }
 
-    function learnSkill(
-        uint256 characterId,
-        address owner,
-        uint256 skillType
-    ) external {
-        require(msg.sender == address(registry), "Only registry");
+    struct CraftSkillParams {
+        uint256 characterId;
+        uint256[] requiredSkillTypes; // skills required to craft this new skill
+        uint256 newSkillType;
+        uint256 nonce;
+        bytes signature;
+    }
 
+    constructor(
+        address _signer,
+        address _registry
+    ) ERC1155("https://assets.energicrafter.com/metadata/skills/{id}.json") Ownable(msg.sender) {
+        signerAddress = _signer;
+        registry = _registry;
+    }
+
+    function learnSkill(LearnSkillParams calldata params) external {
+        require(params.nonce == nonces[msg.sender]++, "Invalid nonce");
+        require(globalSkills[params.skillType], "Skill not available in academy");
+
+        bytes32 messageHash = keccak256(abi.encodePacked(
+            params.characterId,
+            params.skillType,
+            msg.sender,
+            params.nonce
+        ));
+        bytes32 ethSignedMessageHash = MessageHashUtils.toEthSignedMessageHash(messageHash);
+        require(ECDSA.recover(ethSignedMessageHash, params.signature) == signerAddress, "Invalid signature");
+
+        _mintSkill(params.characterId, params.skillType);
+    }
+
+    function craftNewSkill(CraftSkillParams calldata params) external {
+        require(params.nonce == nonces[msg.sender]++, "Invalid nonce");
+        require(!globalSkills[params.newSkillType], "Skill already exists");
+
+        // Verify character has all required skills
+        for(uint i = 0; i < params.requiredSkillTypes.length; i++) {
+            require(hasSkill(params.characterId, params.requiredSkillTypes[i]), "Missing required skill");
+        }
+
+        bytes32 messageHash = keccak256(abi.encodePacked(
+            params.characterId,
+            params.requiredSkillTypes,
+            params.newSkillType,
+            msg.sender,
+            params.nonce
+        ));
+        bytes32 ethSignedMessageHash = MessageHashUtils.toEthSignedMessageHash(messageHash);
+        require(ECDSA.recover(ethSignedMessageHash, params.signature) == signerAddress, "Invalid signature");
+
+        // Add to global skills registry
+        globalSkills[params.newSkillType] = true;
+
+        // Mint the first instance to the crafter
+        _mintSkill(params.characterId, params.newSkillType);
+
+        emit NewSkillCrafted(params.characterId, params.newSkillType);
+    }
+
+    function _mintSkill(uint256 characterId, uint256 skillType) internal {
         uint256 instanceId = (skillType << 128) | nextSkillInstance[skillType]++;
-        _mint(owner, instanceId, 1, "");
+        _mint(msg.sender, instanceId, 1, "");
         skillCharacter[instanceId] = characterId;
-
-        // Add skill to character's skill list
         characterSkills[characterId].push(instanceId);
+
+        emit SkillLearned(characterId, skillType, instanceId);
     }
 
     function transferWithCharacter(
